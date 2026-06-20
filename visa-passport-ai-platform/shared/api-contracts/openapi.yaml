@@ -1,0 +1,142 @@
+openapi: 3.1.0
+info:
+  title: Visa Platform Internal OCR API
+  version: 0.2.0
+  description: Provider-neutral contract for passport OCR and MRZ parsing.
+servers:
+  - url: http://localhost:8001
+    description: Local development
+paths:
+  /health:
+    get:
+      operationId: getOcrHealth
+      tags: [health]
+      responses:
+        "200":
+          description: Service is healthy.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /ocr/passport:
+    post:
+      operationId: processPassport
+      tags: [passport OCR]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PassportOCRRequest"
+      responses:
+        "200":
+          description: Deterministic mock extraction result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PassportOCRResponse"
+        "422":
+          description: Request validation failed.
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, service]
+      properties:
+        status:
+          type: string
+          const: ok
+        service:
+          type: string
+          const: ocr-service
+    PassportOCRRequest:
+      type: object
+      additionalProperties: false
+      required: [document_type, image_url]
+      properties:
+        document_type:
+          type: string
+          const: passport
+        country_hint:
+          anyOf:
+            - type: string
+              pattern: "^[A-Za-z]{2,3}$"
+            - type: "null"
+        image_url:
+          type: string
+          format: uri
+        job_id:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 191
+            - type: "null"
+    PassportOCRResponse:
+      type: object
+      required: [status, job_id, confidence, extracted_data, mrz, warnings]
+      properties:
+        status:
+          type: string
+          const: success
+        job_id:
+          anyOf:
+            - type: string
+            - type: "null"
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        extracted_data:
+          $ref: "#/components/schemas/PassportExtractedData"
+        mrz:
+          $ref: "#/components/schemas/MRZResult"
+        warnings:
+          type: array
+          items:
+            type: string
+    PassportExtractedData:
+      type: object
+      required:
+        - passport_number
+        - surname
+        - given_names
+        - nationality
+        - date_of_birth
+      properties:
+        passport_number:
+          type: string
+        surname:
+          type: string
+        given_names:
+          type: string
+        nationality:
+          type: string
+        date_of_birth:
+          type: string
+          format: date
+        sex:
+          anyOf:
+            - type: string
+            - type: "null"
+        date_of_issue:
+          anyOf:
+            - type: string
+              format: date
+            - type: "null"
+        date_of_expiry:
+          anyOf:
+            - type: string
+              format: date
+            - type: "null"
+        place_of_birth:
+          anyOf:
+            - type: string
+            - type: "null"
+    MRZResult:
+      type: object
+      required: [raw, valid]
+      properties:
+        raw:
+          type: string
+        valid:
+          type: boolean

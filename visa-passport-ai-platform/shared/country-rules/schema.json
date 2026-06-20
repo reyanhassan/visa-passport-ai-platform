@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://visa-platform.local/schemas/country-rule.json",
+  "title": "Country passport and visa rules",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["country_code", "country_name", "passport_rules", "visa_rules"],
+  "properties": {
+    "country_code": {
+      "type": "string",
+      "pattern": "^[A-Z]{2}$"
+    },
+    "country_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "passport_rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "passport_number_regex",
+        "required_fields",
+        "date_format",
+        "min_expiry_months_for_visa"
+      ],
+      "properties": {
+        "passport_number_regex": {
+          "type": "string",
+          "minLength": 1
+        },
+        "required_fields": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "date_format": {
+          "type": "string",
+          "const": "YYYY-MM-DD"
+        },
+        "min_expiry_months_for_visa": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60
+        }
+      }
+    },
+    "visa_rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["supported_visa_types", "required_documents"],
+      "properties": {
+        "supported_visa_types": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required_documents": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

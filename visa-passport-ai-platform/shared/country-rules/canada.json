@@ -1,0 +1,22 @@
+{
+  "country_code": "CA",
+  "country_name": "Canada",
+  "passport_rules": {
+    "passport_number_regex": "^[A-Z]{2}[0-9]{6}$",
+    "required_fields": [
+      "passport_number",
+      "surname",
+      "given_names",
+      "nationality",
+      "date_of_birth",
+      "sex",
+      "date_of_expiry"
+    ],
+    "date_format": "YYYY-MM-DD",
+    "min_expiry_months_for_visa": 6
+  },
+  "visa_rules": {
+    "supported_visa_types": ["visitor", "business_visitor", "super_visa"],
+    "required_documents": ["passport_scan", "photo", "proof_of_funds"]
+  }
+}

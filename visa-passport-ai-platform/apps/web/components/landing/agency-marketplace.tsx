@@ -1,0 +1,10 @@
+import Link from "next/link";
+
+import { Badge } from "@/components/ui/badge";
+import { Icon } from "@/components/shared/icon";
+
+const agencies = [{ initials: "AT", name: "Atlas Travel Co.", region: "Middle East & Europe", rating: "4.9", cases: "400+ cases" }, { initials: "NM", name: "Northstar Mobility", region: "Europe & Americas", rating: "4.8", cases: "300+ cases" }, { initials: "VP", name: "Voyage Partners", region: "Asia Pacific", rating: "4.7", cases: "180+ cases" }];
+
+export function AgencyMarketplace() {
+  return <section className="landing-section marketplace-section" id="agencies"><div className="marketplace-grid"><div className="marketplace-preview"><div className="marketplace-top"><span>Verified agency network</span><Badge tone="success">Accepting clients</Badge></div>{agencies.map((agency, index) => <div className={`agency-preview-row${index === 0 ? " featured" : ""}`} key={agency.name}><span className="agency-logo">{agency.initials}</span><div><strong>{agency.name} {index === 0 && <i>✓</i>}</strong><small>{agency.region}</small></div><div><strong>★ {agency.rating}</strong><small>{agency.cases}</small></div><button aria-label={`View ${agency.name}`}><Icon name="arrow" /></button></div>)}<div className="marketplace-note"><Icon name="shield" /><span><strong>Every agency is verified</strong><small>Identity, credentials, and service history reviewed.</small></span></div></div><div className="marketplace-copy"><span className="section-tag">Agency marketplace</span><h2>Expert help,<br />right when you need it.</h2><p>Work independently or connect with a verified visa processing agency. Agencies get a purpose-built workspace to manage clients, documents, and applications at scale.</p><div className="metric-row"><div><strong>50+</strong><span>Verified agencies</span></div><div><strong>28</strong><span>Languages covered</span></div><div><strong>4.8</strong><span>Average rating</span></div></div><Link className="dark-link" href="/agency">Explore the agency workspace <Icon name="arrow" /></Link></div></div></section>;
+}

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "new-york",
+  "rsc": true,
+  "tsx": true,
+  "tailwind": {
+    "css": "../../apps/web/app/globals.css",
+    "baseColor": "slate",
+    "cssVariables": true
+  },
+  "aliases": {
+    "components": "@visa-platform/ui/components",
+    "utils": "@visa-platform/ui/lib/utils",
+    "ui": "@visa-platform/ui/components",
+    "lib": "@visa-platform/ui/lib",
+    "hooks": "@visa-platform/ui/hooks"
+  },
+  "iconLibrary": "lucide"
+}

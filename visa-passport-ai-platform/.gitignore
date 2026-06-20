@@ -1,0 +1,44 @@
+# Dependencies and package managers
+node_modules/
+.pnpm-store/
+
+# Next.js and Node build output
+.next/
+out/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Prisma and local data
+*.db
+*.db-journal
+
+# IDE and operating system
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+tmp/
+temp/
+uploads/*
+!uploads/.gitkeep
+apps/web/public/uploads/*
+!apps/web/public/uploads/.gitkeep

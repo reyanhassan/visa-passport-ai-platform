@@ -1,0 +1,40 @@
+{
+  "name": "visa-passport-ai-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI-powered visa and passport processing marketplace monorepo",
+  "packageManager": "pnpm@10.12.1",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "build": "corepack pnpm -r --if-present build",
+    "build:packages": "corepack pnpm --filter './packages/*' --if-present build",
+    "dev": "corepack pnpm build:packages && concurrently --kill-others-on-fail --names web,worker,ocr --prefix-colors cyan,magenta,yellow \"corepack pnpm dev:web\" \"corepack pnpm dev:worker\" \"corepack pnpm dev:ocr\"",
+    "dev:web": "corepack pnpm --filter @visa-platform/web dev",
+    "dev:worker": "corepack pnpm --filter @visa-platform/worker dev",
+    "dev:ocr": "python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8001 --app-dir apps/ocr-service",
+    "lint": "corepack pnpm -r --if-present lint",
+    "typecheck": "corepack pnpm -r --if-present typecheck",
+    "test": "corepack pnpm -r --if-present test && corepack pnpm test:ocr",
+    "test:ocr": "cd apps/ocr-service && python -m pytest",
+    "db:generate": "corepack pnpm --filter @visa-platform/database db:generate",
+    "db:migrate": "corepack pnpm --filter @visa-platform/database db:migrate",
+    "db:studio": "corepack pnpm --filter @visa-platform/database db:studio",
+    "infra:up": "docker compose -f infra/docker-compose.yml up --build -d",
+    "infra:down": "docker compose -f infra/docker-compose.yml down"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "sharp"
+    ]
+  }
+}

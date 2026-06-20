@@ -1,0 +1,7 @@
+import { Icon, type IconName } from "@/components/shared/icon";
+
+const controls: { icon: IconName; title: string; text: string }[] = [{ icon: "lock", title: "Encrypted by default", text: "Documents are protected in transit and at rest with modern encryption." }, { icon: "shield", title: "Privacy-first workflows", text: "Sensitive data stays out of logs, analytics, and background job payloads." }, { icon: "audit", title: "Complete audit trails", text: "Every access, update, export, and deletion is designed to be traceable." }];
+
+export function SecuritySection() {
+  return <section className="security-section"><div className="security-halo"><Icon name="shield" /><span className="halo-ring ring-one" /><span className="halo-ring ring-two" /><span className="halo-check check-a">✓</span><span className="halo-check check-b">✓</span><span className="halo-check check-c">✓</span></div><div className="security-copy"><span className="section-tag light">Security and trust</span><h2>Built around your most sensitive documents.</h2><p>Passport data deserves more than checkbox security. Our architecture is designed around isolation, least privilege, and transparent control.</p><div className="security-controls">{controls.map((control) => <div key={control.title}><span><Icon name={control.icon} /></span><div><strong>{control.title}</strong><small>{control.text}</small></div></div>)}</div></div></section>;
+}

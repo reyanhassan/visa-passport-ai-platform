@@ -1,0 +1,22 @@
+{
+  "country_code": "GB",
+  "country_name": "United Kingdom",
+  "passport_rules": {
+    "passport_number_regex": "^[0-9]{9}$",
+    "required_fields": [
+      "passport_number",
+      "surname",
+      "given_names",
+      "nationality",
+      "date_of_birth",
+      "sex",
+      "date_of_expiry"
+    ],
+    "date_format": "YYYY-MM-DD",
+    "min_expiry_months_for_visa": 6
+  },
+  "visa_rules": {
+    "supported_visa_types": ["standard_visitor", "business_visitor", "family_visitor"],
+    "required_documents": ["passport_scan", "photo", "bank_statement"]
+  }
+}

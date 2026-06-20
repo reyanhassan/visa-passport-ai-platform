@@ -1,0 +1,179 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  INDIVIDUAL
+  AGENCY_USER
+  AGENCY_ADMIN
+  ADMIN
+}
+
+enum AgencyStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+
+enum ExtractionJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum VisaApplicationStatus {
+  DRAFT
+  SUBMITTED
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  fullName     String   @db.VarChar(200)
+  email        String   @unique @db.VarChar(320)
+  passwordHash String?  @db.VarChar(255)
+  role         UserRole @default(INDIVIDUAL)
+  agencyId     String?
+  agency       Agency?  @relation(fields: [agencyId], references: [id], onDelete: SetNull)
+
+  extractionJobs   PassportExtractionJob[]
+  visaApplications VisaApplication[]
+  auditLogs        AuditLog[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([agencyId, role])
+  @@index([createdAt])
+}
+
+model Agency {
+  id      String       @id @default(cuid())
+  name    String       @db.VarChar(200)
+  email   String       @unique @db.VarChar(320)
+  phone   String?      @db.VarChar(32)
+  country String?      @db.Char(2)
+  city    String?      @db.VarChar(120)
+  status  AgencyStatus @default(PENDING)
+
+  users            User[]
+  extractionJobs   PassportExtractionJob[]
+  visaApplications VisaApplication[]
+  auditLogs        AuditLog[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([status])
+  @@index([country])
+  @@index([createdAt])
+}
+
+model PassportExtractionJob {
+  id             String              @id @default(uuid())
+  userId         String?
+  user           User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  agencyId       String?
+  agency         Agency?             @relation(fields: [agencyId], references: [id], onDelete: SetNull)
+  status         ExtractionJobStatus @default(PENDING)
+  documentType   String              @db.VarChar(32)
+  countryHint    String?             @db.VarChar(3)
+  imageObjectKey String?             @db.Text
+  confidence     Decimal?            @db.Decimal(5, 4)
+  errorMessage   String?             @db.Text
+
+  extractedData    PassportExtractedData?
+  visaApplications VisaApplication[]
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  expiresAt DateTime? @db.Timestamptz(3)
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+  @@index([agencyId, createdAt])
+  @@index([expiresAt])
+}
+
+model PassportExtractedData {
+  id                      String                @id @default(cuid())
+  jobId                   String                @unique
+  job                     PassportExtractionJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  passportNumberEncrypted String                @db.Text
+  surnameEncrypted        String                @db.Text
+  givenNamesEncrypted     String                @db.Text
+  nationality             String                @db.VarChar(3)
+  dateOfBirthEncrypted    String                @db.Text
+  sex                     String?               @db.VarChar(16)
+  dateOfIssue             DateTime?             @db.Date
+  dateOfExpiry            DateTime?             @db.Date
+  placeOfBirthEncrypted   String?               @db.Text
+  mrzRawEncrypted         String?               @db.Text
+  mrzValid                Boolean               @default(false)
+  createdAt               DateTime              @default(now()) @db.Timestamptz(3)
+}
+
+model VisaApplication {
+  id                 String                 @id @default(cuid())
+  userId             String?
+  user               User?                  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  agencyId           String?
+  agency             Agency?                @relation(fields: [agencyId], references: [id], onDelete: SetNull)
+  passportJobId      String?
+  passportJob        PassportExtractionJob? @relation(fields: [passportJobId], references: [id], onDelete: SetNull)
+  destinationCountry String                 @db.Char(2)
+  visaType           String                 @db.VarChar(120)
+  status             VisaApplicationStatus  @default(DRAFT)
+  formData           Json                   @default("{}")
+  createdAt          DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime               @updatedAt @db.Timestamptz(3)
+
+  @@index([userId, createdAt])
+  @@index([agencyId, status, createdAt])
+  @@index([passportJobId])
+  @@index([destinationCountry, visaType])
+  @@index([status, updatedAt])
+}
+
+model CountryRule {
+  id          String   @id @default(cuid())
+  countryCode String   @unique @db.Char(2)
+  countryName String   @db.VarChar(120)
+  rules       Json
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([isActive])
+  @@index([countryName])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  agencyId   String?
+  agency     Agency?  @relation(fields: [agencyId], references: [id], onDelete: SetNull)
+  action     String   @db.VarChar(120)
+  entityType String   @db.VarChar(120)
+  entityId   String?  @db.VarChar(191)
+  ipAddress  String?  @db.VarChar(45)
+  userAgent  String?  @db.Text
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([userId, createdAt])
+  @@index([agencyId, createdAt])
+  @@index([entityType, entityId])
+  @@index([action, createdAt])
+  @@index([createdAt])
+}
