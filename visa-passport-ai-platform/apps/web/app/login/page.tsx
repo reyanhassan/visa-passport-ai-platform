@@ -7,7 +7,17 @@ import { useState, type FormEvent } from "react";
 import { AuthShell } from "@/components/shared/auth-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ApiError, apiRequest } from "@/lib/api";
+import { ApiError, apiErrorMessage, apiRequest } from "@/lib/api";
+
+function loginErrorMessage(error: unknown): string {
+  if (error instanceof ApiError && error.code === "VALIDATION_ERROR") {
+    return "Enter a valid email address and password.";
+  }
+  if (error instanceof ApiError && error.code === "INVALID_CREDENTIALS") {
+    return "The email address or password is incorrect.";
+  }
+  return apiErrorMessage(error, "Unable to sign in. Please try again.");
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -28,13 +38,13 @@ export default function LoginPage() {
       router.replace("/dashboard");
       router.refresh();
     } catch (requestError) {
-      setError(requestError instanceof ApiError ? requestError.message : "Unable to sign in");
+      setError(loginErrorMessage(requestError));
     } finally {
       setIsSubmitting(false);
     }
   }
 
   return <AuthShell eyebrow="Welcome back" title="Sign in to your workspace" description="Continue managing passports and applications securely." footer={<p>New to VisaFlow AI? <Link href="/register">Create an account</Link></p>}>
-    <form className="auth-form" onSubmit={submit}>{error && <div className="auth-error" role="alert">{error}</div>}<label>Email address<Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" autoComplete="email" required disabled={isSubmitting} /></label><label><span>Password <a href="#">Forgot password?</a></span><Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" autoComplete="current-password" required disabled={isSubmitting} /></label><Button type="submit" size="lg" disabled={isSubmitting}>{isSubmitting ? "Signing in…" : "Sign in securely"}</Button></form>
+    <form className="auth-form" onSubmit={submit} aria-busy={isSubmitting}>{error && <div className="auth-error" role="alert" aria-live="polite">{error}</div>}<label>Email address<Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" autoComplete="email" required disabled={isSubmitting} /></label><label><span>Password <a href="#">Forgot password?</a></span><Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" autoComplete="current-password" required disabled={isSubmitting} /></label><Button type="submit" size="lg" disabled={isSubmitting}>{isSubmitting ? "Signing in…" : "Sign in securely"}</Button></form>
   </AuthShell>;
 }

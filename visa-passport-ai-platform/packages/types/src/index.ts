@@ -16,12 +16,19 @@ export interface CreatePassportExtractionRequest {
   objectKey?: string;
 }
 
-export interface CreatePassportExtractionResponse {
-  success: true;
-  jobId: string;
-  status: "PENDING";
-  message: "Passport extraction job created successfully";
-}
+export type CreatePassportExtractionResponse =
+  | {
+      success: true;
+      jobId: string;
+      status: "PENDING";
+      message: "Passport extraction job created successfully";
+    }
+  | {
+      success: true;
+      jobId: string;
+      status: "COMPLETED";
+      message: "Passport extraction completed using local development fallback";
+    };
 
 export interface PassportExtractionQueuePayload {
   jobId: string;

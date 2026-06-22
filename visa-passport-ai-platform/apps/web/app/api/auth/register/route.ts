@@ -1,4 +1,5 @@
-import { UserRole, prisma } from "@visa-platform/database";
+import { sanitizeLogMessage } from "@visa-platform/config/security";
+import { Prisma, UserRole, prisma } from "@visa-platform/database";
 import { hash } from "bcryptjs";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -18,21 +19,29 @@ export async function POST(request: Request) {
   const parsed = registerSchema.safeParse(body);
   if (!parsed.success) return apiError("VALIDATION_ERROR", "Invalid registration details", 400);
 
-  const existingUser = await prisma.user.findUnique({
-    where: { email: parsed.data.email },
-    select: { id: true },
-  });
-  if (existingUser) return apiError("EMAIL_IN_USE", "An account already exists for this email", 409);
+  try {
+    const existingUser = await prisma.user.findUnique({
+      where: { email: parsed.data.email },
+      select: { id: true },
+    });
+    if (existingUser) return apiError("EMAIL_IN_USE", "An account already exists for this email", 409);
 
-  const user = await prisma.user.create({
-    data: {
-      fullName: parsed.data.fullName,
-      email: parsed.data.email,
-      passwordHash: await hash(parsed.data.password, 12),
-      role: UserRole.INDIVIDUAL,
-    },
-    select: { id: true, fullName: true, email: true, role: true },
-  });
+    const user = await prisma.user.create({
+      data: {
+        fullName: parsed.data.fullName,
+        email: parsed.data.email,
+        passwordHash: await hash(parsed.data.password, 12),
+        role: UserRole.INDIVIDUAL,
+      },
+      select: { id: true, fullName: true, email: true, role: true },
+    });
 
-  return NextResponse.json({ success: true, user }, { status: 201 });
+    return NextResponse.json({ success: true, user }, { status: 201 });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return apiError("EMAIL_IN_USE", "An account already exists for this email", 409);
+    }
+    console.error(`[auth-register] database request failed: ${sanitizeLogMessage(error)}`);
+    return apiError("DATABASE_ERROR", "Unable to connect to the account database", 503);
+  }
 }

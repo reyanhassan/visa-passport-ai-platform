@@ -49,7 +49,31 @@ visa-passport-ai-platform/
 
 ## Install
 
-From this directory:
+### Windows quick start
+
+Open PowerShell or Command Prompt in the directory that contains the project, then run:
+
+```bash
+cd visa-passport-ai-platform
+copy .env.example .env
+pnpm install
+pnpm dev:all
+```
+
+`dev:all` starts PostgreSQL and Redis, generates the Prisma client, deploys the checked-in database migrations, and then starts Next.js, the BullMQ worker, and FastAPI OCR. If `pnpm` is not available yet, install/enable pnpm 10 once before running the block above; on locked-down Windows installations, `corepack pnpm` can be used in place of `pnpm`.
+
+The native FastAPI process also requires its Python dependencies. Install them once before the first `pnpm dev:all`:
+
+```bash
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e "./apps/ocr-service[dev]"
+```
+
+### macOS and Linux
+
+From the monorepo root:
 
 ```bash
 cp .env.example .env
@@ -61,12 +85,7 @@ python -m venv .venv
 Activate the Python environment, then install the OCR service:
 
 ```bash
-# macOS / Linux
 source .venv/bin/activate
-
-# Windows PowerShell
-.venv\Scripts\Activate.ps1
-
 python -m pip install --upgrade pip
 python -m pip install -e "./apps/ocr-service[dev]"
 ```
@@ -77,14 +96,13 @@ The checked-in environment file is only a template. Replace `INTERNAL_API_KEY` a
 
 ### Full Docker stack
 
-From the monorepo root, install workspace dependencies and build the complete local stack:
+From the monorepo root, build and start the complete local stack:
 
 ```bash
-pnpm install
 docker compose -f infra/docker-compose.yml up --build
 ```
 
-This starts PostgreSQL, Redis, FastAPI OCR, the BullMQ worker, and Next.js. Container startup is health-gated so the web and worker services wait for PostgreSQL, Redis, and OCR to become healthy.
+This starts PostgreSQL, Redis, a one-shot Prisma migration service, FastAPI OCR, the BullMQ worker, and Next.js. The migration service waits for PostgreSQL, generates Prisma Client, deploys all checked-in migrations, and exits successfully. Web and worker startup is blocked until migrations complete; their remaining dependencies are health-gated.
 
 Verify the public services from another terminal:
 
@@ -113,23 +131,24 @@ Use `docker compose -f infra/docker-compose.yml down -v` only when you intention
 
 ### Native application development
 
-To run application processes outside Docker, start only the infrastructure services:
+To bootstrap and run all application processes outside Docker with PostgreSQL and Redis in containers:
 
 ```bash
-docker compose -f infra/docker-compose.yml up -d postgres redis
+pnpm dev:all
 ```
 
-Generate the Prisma client and apply the checked-in migrations:
+The same flow can be run as separate steps when troubleshooting:
 
 ```bash
-pnpm db:generate
-pnpm db:migrate
-```
-
-Start the web app, worker, and OCR service together:
-
-```bash
+pnpm dev:infra
+pnpm dev:setup
 pnpm dev
+```
+
+`dev:setup` is repeatable: it regenerates Prisma Client and applies only pending checked-in migrations. To create a new development migration after intentionally changing the Prisma schema, use:
+
+```bash
+pnpm db:migrate:dev -- --name describe_your_change
 ```
 
 Run an individual service with `pnpm dev:web`, `pnpm dev:worker`, or `pnpm dev:ocr`. Run `pnpm build:packages` first when launching the web or worker directly after a clean install.
@@ -159,12 +178,18 @@ Local uploads are stored in `apps/web/public/uploads/passports` and are suitable
 | Command | Purpose |
 | --- | --- |
 | `pnpm dev` | Run all application processes in development |
+| `pnpm dev:infra` | Start PostgreSQL and Redis for native development |
+| `pnpm dev:setup` | Generate Prisma Client and deploy pending migrations |
+| `pnpm dev:all` | Bootstrap infrastructure/database and run all development processes |
 | `pnpm build` | Build all TypeScript workspace projects |
 | `pnpm lint` | Lint workspace projects that define linting |
 | `pnpm typecheck` | Type-check all TypeScript projects |
 | `pnpm test` | Run workspace tests and FastAPI tests |
 | `pnpm db:generate` | Generate the Prisma client |
-| `pnpm db:migrate` | Apply migrations and create a new development migration when the schema changes |
+| `pnpm db:migrate` | Deploy pending checked-in migrations |
+| `pnpm db:migrate:dev -- --name <name>` | Create and apply a migration after a schema change |
+| `pnpm docker:up` | Build and run the full Docker stack in the foreground |
+| `pnpm docker:down` | Stop the Docker stack while preserving data volumes |
 | `pnpm infra:up` | Build and start the full Docker stack in the background |
 | `pnpm infra:down` | Stop the Docker stack while preserving data volumes |
 

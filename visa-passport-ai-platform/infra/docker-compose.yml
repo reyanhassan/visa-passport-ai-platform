@@ -36,6 +36,19 @@ services:
       start_period: 5s
     networks: [platform]
 
+  migrate:
+    image: visa-platform/migrate:local
+    build:
+      context: ..
+      dockerfile: packages/database/Dockerfile
+    restart: "no"
+    environment:
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://visa_user:visa_password@postgres:5432/visa_platform}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [platform]
+
   ocr-service:
     image: visa-platform/ocr-service:local
     build:
@@ -87,8 +100,8 @@ services:
         source: ../${LOCAL_UPLOAD_DIR:-uploads}
         target: /workspace/uploads
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       ocr-service:
@@ -130,8 +143,8 @@ services:
         source: ../${LOCAL_UPLOAD_DIR:-uploads}
         target: /workspace/apps/web/public/uploads
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       ocr-service:

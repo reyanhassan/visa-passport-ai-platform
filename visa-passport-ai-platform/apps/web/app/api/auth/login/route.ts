@@ -1,3 +1,4 @@
+import { sanitizeLogMessage } from "@visa-platform/config/security";
 import { prisma } from "@visa-platform/database";
 import { compare } from "bcryptjs";
 import { NextResponse } from "next/server";
@@ -22,7 +23,13 @@ export async function POST(request: Request) {
   const parsed = loginSchema.safeParse(body);
   if (!parsed.success) return apiError("VALIDATION_ERROR", "Invalid email or password", 400);
 
-  const user = await prisma.user.findUnique({ where: { email: parsed.data.email } });
+  let user: Awaited<ReturnType<typeof prisma.user.findUnique>>;
+  try {
+    user = await prisma.user.findUnique({ where: { email: parsed.data.email } });
+  } catch (error) {
+    console.error(`[auth-login] database request failed: ${sanitizeLogMessage(error)}`);
+    return apiError("DATABASE_ERROR", "Unable to connect to the account database", 503);
+  }
   if (!user?.passwordHash || !(await compare(parsed.data.password, user.passwordHash))) {
     return apiError("INVALID_CREDENTIALS", "Invalid email or password", 401);
   }

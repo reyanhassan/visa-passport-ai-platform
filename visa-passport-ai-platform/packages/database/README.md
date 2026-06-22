@@ -24,7 +24,7 @@ pnpm db:generate
 Create and apply a development migration after changing `prisma/schema.prisma`:
 
 ```bash
-pnpm db:migrate -- --name add_platform_schema
+pnpm db:migrate:dev -- --name add_platform_schema
 ```
 
 From this package directly, the equivalent command is:
@@ -36,7 +36,7 @@ pnpm prisma migrate dev --name add_platform_schema
 Deploy already-reviewed migrations in production with:
 
 ```bash
-pnpm --filter @visa-platform/database db:deploy
+pnpm db:migrate
 ```
 
 Never use `prisma migrate dev` or `prisma db push` against a production database.

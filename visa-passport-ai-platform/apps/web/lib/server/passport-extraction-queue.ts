@@ -11,7 +11,7 @@ function createQueue() {
   const redisUrl = new URL(process.env.REDIS_URL ?? "redis://localhost:6379");
   const database = redisUrl.pathname.slice(1);
 
-  return new Queue<PassportExtractionQueuePayload>(
+  const queue = new Queue<PassportExtractionQueuePayload>(
     process.env.PASSPORT_EXTRACTION_QUEUE ?? "passport-extraction",
     {
       connection: {
@@ -21,8 +21,11 @@ function createQueue() {
         password: redisUrl.password || undefined,
         db: database ? Number(database) : undefined,
         tls: redisUrl.protocol === "rediss:" ? {} : undefined,
-        connectTimeout: 10_000,
+        connectTimeout: 3_000,
         maxRetriesPerRequest: 1,
+        retryStrategy(attempt) {
+          return attempt > 2 ? null : attempt * 250;
+        },
       },
       defaultJobOptions: {
         attempts: 3,
@@ -32,9 +35,23 @@ function createQueue() {
       },
     },
   );
+
+  queue.on("error", (error) => {
+    if (process.env.NODE_ENV !== "development") {
+      console.error(`[passport-extraction-queue] Redis connection unavailable: ${error.name}`);
+    }
+  });
+
+  return queue;
 }
 
 export function getPassportExtractionQueue() {
   globalForQueue.passportExtractionQueue ??= createQueue();
   return globalForQueue.passportExtractionQueue;
+}
+
+export function resetPassportExtractionQueue() {
+  const queue = globalForQueue.passportExtractionQueue;
+  globalForQueue.passportExtractionQueue = undefined;
+  if (queue) void queue.close().catch(() => undefined);
 }

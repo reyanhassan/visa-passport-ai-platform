@@ -13,7 +13,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { apiError } from "@/lib/server/api-error";
-import { getPassportExtractionQueue } from "@/lib/server/passport-extraction-queue";
+import { completeMockPassportExtraction } from "@/lib/server/mock-passport-extraction";
+import {
+  getPassportExtractionQueue,
+  resetPassportExtractionQueue,
+} from "@/lib/server/passport-extraction-queue";
 import { getCurrentUser } from "@/lib/auth";
 
 function isValidImageUrl(value: string): boolean {
@@ -43,6 +47,27 @@ const requestSchema = z
   })
   .strict()
   .refine((value) => Boolean(value.imageUrl || value.objectKey));
+
+async function enqueueWithTimeout(
+  payload: PassportExtractionQueuePayload,
+  jobId: string,
+): Promise<void> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    await Promise.race([
+      getPassportExtractionQueue().add("extract-passport", payload, { jobId }),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error("Passport extraction queue enqueue timed out")),
+          5_000,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
 
 export async function POST(request: Request) {
   const user = await getCurrentUser();
@@ -93,6 +118,7 @@ export async function POST(request: Request) {
       return createdJob;
     });
   } catch (error) {
+    resetPassportExtractionQueue();
     console.error(
       `[passport-extract] failed to create database job: ${sanitizeLogMessage(error)}`,
     );
@@ -112,13 +138,39 @@ export async function POST(request: Request) {
   };
 
   try {
-    await getPassportExtractionQueue().add("extract-passport", queuePayload, {
-      jobId: job.id,
-    });
+    await enqueueWithTimeout(queuePayload, job.id);
   } catch (error) {
     console.error(
       `[passport-extract] failed to enqueue job ${job.id}: ${sanitizeLogMessage(error)}`,
     );
+
+    if (process.env.NODE_ENV === "development") {
+      try {
+        await completeMockPassportExtraction(job.id, user.id);
+        console.warn(
+          "Redis unavailable. Completed passport extraction using development mock fallback.",
+        );
+
+        const response: CreatePassportExtractionResponse = {
+          success: true,
+          jobId: job.id,
+          status: "COMPLETED",
+          message: "Passport extraction completed using local development fallback",
+        };
+
+        return NextResponse.json(response);
+      } catch (fallbackError) {
+        console.error(
+          `[passport-extract] development fallback failed for job ${job.id}: ${sanitizeLogMessage(fallbackError)}`,
+        );
+        return apiError(
+          "FALLBACK_FAILED",
+          "Unable to complete passport extraction using the development fallback",
+          500,
+        );
+      }
+    }
+
     await prisma.passportExtractionJob
       .update({
         where: { id: job.id },

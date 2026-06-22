@@ -11,15 +11,14 @@ import type {
 import { useCallback, useEffect, useState } from "react";
 
 import { Icon } from "@/components/shared/icon";
-import { ApiError, apiRequest } from "@/lib/api";
+import { apiErrorMessage, apiRequest } from "@/lib/api";
 import { ExtractedPassportForm } from "./extracted-passport-form";
 import { PassportJobStatus } from "./passport-job-status";
 import { PassportUploadForm } from "./passport-upload-form";
 import { RecentExtractionsTable } from "./recent-extractions-table";
 
 function displayError(error: unknown) {
-  if (error instanceof ApiError) return error.message;
-  return "Something went wrong. Please try again.";
+  return apiErrorMessage(error, "Something went wrong. Please try again.");
 }
 
 export function PassportUploadWorkspace() {
@@ -29,6 +28,7 @@ export function PassportUploadWorkspace() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoadingRecent, setIsLoadingRecent] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [lastChecked, setLastChecked] = useState<string | null>(null);
 
   const loadRecent = useCallback(async () => {
@@ -79,6 +79,7 @@ export function PassportUploadWorkspace() {
   async function submitExtraction(request: CreatePassportExtractionRequest) {
     setIsSubmitting(true);
     setError(null);
+    setSuccess(null);
     setLastChecked(null);
     try {
       const created = await apiRequest<CreatePassportExtractionResponse>("/api/passports/extract", {
@@ -92,7 +93,12 @@ export function PassportUploadWorkspace() {
         countryHint: request.countryHint ?? null,
         createdAt: new Date().toISOString(),
       });
-      await loadRecent();
+      if (created.status === "COMPLETED") {
+        await refreshStatus(created.jobId);
+        setSuccess(created.message);
+      } else {
+        await loadRecent();
+      }
     } catch (requestError) {
       setError(displayError(requestError));
     } finally {
@@ -100,5 +106,5 @@ export function PassportUploadWorkspace() {
     }
   }
 
-  return <div className="passport-upload-workspace">{error && <div className="passport-error-alert" role="alert"><span><Icon name="shield" /></span><div><strong>We couldn’t complete that request</strong><p>{error}</p></div><button onClick={() => setError(null)} aria-label="Dismiss error">×</button></div>}<div className="passport-upload-grid"><PassportUploadForm isSubmitting={isSubmitting} onSubmit={submitExtraction} onError={setError} /><PassportJobStatus job={activeJob} isRefreshing={isRefreshing} lastChecked={lastChecked} onRefresh={() => refreshStatus()} /></div>{activeJob?.status === "COMPLETED" && activeJob.extractedData && <ExtractedPassportForm key={activeJob.id} fields={activeJob.extractedData} confidence={activeJob.confidence} />}<RecentExtractionsTable jobs={recentJobs} activeJobId={activeJob?.id ?? null} isLoading={isLoadingRecent} onView={(jobId) => refreshStatus(jobId)} /></div>;
+  return <div className="passport-upload-workspace">{error && <div className="passport-error-alert" role="alert"><span><Icon name="shield" /></span><div><strong>We couldn’t complete that request</strong><p>{error}</p></div><button onClick={() => setError(null)} aria-label="Dismiss error">×</button></div>}{success && <div className="passport-success-alert" role="status"><span><Icon name="check" /></span><div><strong>Extraction ready</strong><p>{success}</p></div><button onClick={() => setSuccess(null)} aria-label="Dismiss success message">×</button></div>}<div className="passport-upload-grid"><PassportUploadForm isSubmitting={isSubmitting} onSubmit={submitExtraction} onError={setError} /><PassportJobStatus job={activeJob} isRefreshing={isRefreshing} lastChecked={lastChecked} onRefresh={() => refreshStatus()} /></div>{activeJob?.status === "COMPLETED" && activeJob.extractedData && <ExtractedPassportForm key={activeJob.id} fields={activeJob.extractedData} confidence={activeJob.confidence} />}<RecentExtractionsTable jobs={recentJobs} activeJobId={activeJob?.id ?? null} isLoading={isLoadingRecent} onView={(jobId) => refreshStatus(jobId)} /></div>;
 }
