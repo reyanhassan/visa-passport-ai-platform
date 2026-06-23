@@ -7,6 +7,7 @@ import { NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth";
 import { apiError } from "@/lib/server/api-error";
+import { loadWebDeploymentConfig } from "@/lib/server/deployment-config";
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024;
 const extensionByMimeType: Record<string, string> = {
@@ -34,17 +35,28 @@ export async function POST(request: Request) {
     return apiError("FILE_SIZE_INVALID", "Passport file must be between 1 byte and 15 MB", 413);
   }
 
-  const directory = uploadDirectory();
   const filename = `${randomUUID()}${extension}`;
-  await mkdir(directory, { recursive: true });
-  await writeFile(join(directory, filename), Buffer.from(await file.arrayBuffer()), {
-    flag: "wx",
-  });
-
   const objectKey = `uploads/passports/${filename}`;
+
+  let uploadProvider: "local" | "mock";
+  try {
+    ({ uploadProvider } = loadWebDeploymentConfig());
+  } catch (error) {
+    console.error("[passport-upload] invalid deployment configuration", error);
+    return apiError("CONFIGURATION_ERROR", "Passport upload is not configured correctly", 500);
+  }
+
+  if (uploadProvider === "local") {
+    const directory = uploadDirectory();
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, filename), Buffer.from(await file.arrayBuffer()), {
+      flag: "wx",
+    });
+  }
+
   const response: UploadPassportResponse = {
     success: true,
-    imageUrl: `/${objectKey}`,
+    imageUrl: uploadProvider === "mock" ? `mock://${objectKey}` : `/${objectKey}`,
     objectKey,
   };
   return NextResponse.json(response, { status: 201 });

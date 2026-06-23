@@ -13,6 +13,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { apiError } from "@/lib/server/api-error";
+import { loadWebDeploymentConfig } from "@/lib/server/deployment-config";
 import { completeMockPassportExtraction } from "@/lib/server/mock-passport-extraction";
 import {
   getPassportExtractionQueue,
@@ -20,10 +21,28 @@ import {
 } from "@/lib/server/passport-extraction-queue";
 import { getCurrentUser } from "@/lib/auth";
 
+const passportObjectKeyPattern =
+  /^uploads\/passports\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(?:jpg|png|webp|pdf)$/i;
+const safePassportFilenamePattern =
+  /^[a-z0-9][a-z0-9_-]*\.(?:jpg|jpeg|png|webp|pdf)$/i;
+
+function isValidObjectKey(value: string): boolean {
+  return passportObjectKeyPattern.test(value);
+}
+
 function isValidImageUrl(value: string): boolean {
-  if (value.startsWith("/uploads/passports/") && !value.includes("..")) return true;
+  if (value.startsWith("/")) return isValidObjectKey(value.slice(1));
+  const mockPrefix = "mock://uploads/passports/";
+  if (value.startsWith(mockPrefix)) {
+    return safePassportFilenamePattern.test(value.slice(mockPrefix.length));
+  }
   try {
-    return ["http:", "https:"].includes(new URL(value).protocol);
+    const url = new URL(value);
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) return false;
+    const decodedPath = decodeURIComponent(url.pathname);
+    if (decodedPath.includes("..")) return false;
+    const filename = decodedPath.split("/").pop();
+    return Boolean(filename && safePassportFilenamePattern.test(filename));
   } catch {
     return false;
   }
@@ -42,7 +61,7 @@ const requestSchema = z
     objectKey: z
       .string()
       .trim()
-      .regex(/^uploads\/passports\/[a-f0-9-]+\.(?:jpg|png|webp|pdf)$/i)
+      .refine(isValidObjectKey)
       .optional(),
   })
   .strict()
@@ -86,6 +105,14 @@ export async function POST(request: Request) {
     return apiError("VALIDATION_ERROR", "Invalid request body", 400);
   }
 
+  let extractionMode: "queue" | "mock";
+  try {
+    ({ extractionMode } = loadWebDeploymentConfig());
+  } catch (error) {
+    console.error("[passport-extract] invalid deployment configuration", error);
+    return apiError("CONFIGURATION_ERROR", "Passport extraction is not configured correctly", 500);
+  }
+
   let job: Awaited<ReturnType<typeof prisma.passportExtractionJob.create>>;
   const imageReference = parsed.data.objectKey ?? parsed.data.imageUrl!;
 
@@ -125,6 +152,26 @@ export async function POST(request: Request) {
     return apiError("DATABASE_ERROR", "Unable to create passport extraction job", 500);
   }
 
+  if (extractionMode === "mock") {
+    try {
+      await completeMockPassportExtraction(job.id, user.id, "mock_mode");
+
+      const response: CreatePassportExtractionResponse = {
+        success: true,
+        jobId: job.id,
+        status: "COMPLETED",
+        message: "Passport extraction completed using mock mode",
+      };
+
+      return NextResponse.json(response);
+    } catch (error) {
+      console.error(
+        `[passport-extract] mock extraction failed for job ${job.id}: ${sanitizeLogMessage(error)}`,
+      );
+      return apiError("MOCK_EXTRACTION_FAILED", "Unable to complete mock passport extraction", 500);
+    }
+  }
+
   const queuePayload: PassportExtractionQueuePayload = {
     jobId: job.id,
     userId: user.id,
@@ -146,7 +193,7 @@ export async function POST(request: Request) {
 
     if (process.env.NODE_ENV === "development") {
       try {
-        await completeMockPassportExtraction(job.id, user.id);
+        await completeMockPassportExtraction(job.id, user.id, "development_queue_fallback");
         console.warn(
           "Redis unavailable. Completed passport extraction using development mock fallback.",
         );

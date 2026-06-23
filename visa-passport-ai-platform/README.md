@@ -186,12 +186,49 @@ Local uploads are stored in `apps/web/public/uploads/passports` and are suitable
 | `pnpm typecheck` | Type-check all TypeScript projects |
 | `pnpm test` | Run workspace tests and FastAPI tests |
 | `pnpm db:generate` | Generate the Prisma client |
+| `pnpm db:deploy` | Deploy pending checked-in migrations to the configured database |
 | `pnpm db:migrate` | Deploy pending checked-in migrations |
 | `pnpm db:migrate:dev -- --name <name>` | Create and apply a migration after a schema change |
 | `pnpm docker:up` | Build and run the full Docker stack in the foreground |
 | `pnpm docker:down` | Stop the Docker stack while preserving data volumes |
 | `pnpm infra:up` | Build and start the full Docker stack in the background |
 | `pnpm infra:down` | Stop the Docker stack while preserving data volumes |
+
+## Netlify deployment
+
+1. Push the repository to GitHub.
+2. Import the project in Netlify.
+3. Set the base directory to `visa-passport-ai-platform`.
+4. Use this build command:
+
+   ```bash
+   corepack enable && corepack prepare pnpm@10.12.1 --activate && pnpm install --frozen-lockfile && pnpm db:generate && pnpm build:packages && pnpm --filter @visa-platform/web build
+   ```
+
+5. Set the publish directory to `apps/web/.next`.
+6. Add these environment variables:
+
+   ```env
+   DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DATABASE?sslmode=require
+   JWT_SECRET=replace_with_strong_random_secret_at_least_32_chars
+   FIELD_ENCRYPTION_KEY=replace_with_strong_random_secret_at_least_32_chars
+   NEXT_PUBLIC_APP_URL=https://your-netlify-site.netlify.app
+   DEPLOYMENT_TARGET=netlify
+   EXTRACTION_MODE=mock
+   UPLOAD_PROVIDER=mock
+   ```
+
+7. Apply the checked-in migrations to the hosted PostgreSQL database with
+   `pnpm db:deploy`, then deploy the site.
+
+The repository-level `netlify.toml` supplies the same build settings. Netlify
+deploys only the Next.js web app for now; the Docker stack, Redis, BullMQ worker,
+and FastAPI OCR service remain available for local development. Passport
+extraction uses explicit mock upload and extraction modes on Netlify. Real OCR
+can be connected later by deploying the worker and OCR service separately.
+
+See [`docs/netlify-deployment.md`](docs/netlify-deployment.md) for hosted
+database guidance, migration steps, and the complete environment checklist.
 
 ## Design and extension points
 

@@ -26,8 +26,12 @@ function asUtcDate(value: string): Date {
   return new Date(`${value}T00:00:00.000Z`);
 }
 
-/** Completes a passport job without Redis for local development only. */
-export async function completeMockPassportExtraction(jobId: string, userId: string) {
+/** Completes a passport job synchronously without Redis or the OCR service. */
+export async function completeMockPassportExtraction(
+  jobId: string,
+  userId: string,
+  auditSource = "mock_mode",
+) {
   return prisma.$transaction(async (transaction) => {
     const job = await transaction.passportExtractionJob.findFirst({
       where: { id: jobId, userId },
@@ -76,7 +80,7 @@ export async function completeMockPassportExtraction(jobId: string, userId: stri
       metadata: {
         confidence: MOCK_CONFIDENCE,
         mrzValid: mockPassportData.mrzValid,
-        source: "development_mock_fallback",
+        source: auditSource,
       },
     });
 

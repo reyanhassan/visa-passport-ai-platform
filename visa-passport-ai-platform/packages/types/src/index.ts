@@ -27,7 +27,9 @@ export type CreatePassportExtractionResponse =
       success: true;
       jobId: string;
       status: "COMPLETED";
-      message: "Passport extraction completed using local development fallback";
+      message:
+        | "Passport extraction completed using mock mode"
+        | "Passport extraction completed using local development fallback";
     };
 
 export interface PassportExtractionQueuePayload {
