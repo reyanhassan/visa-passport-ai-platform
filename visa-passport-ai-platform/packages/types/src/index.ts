@@ -75,6 +75,12 @@ export interface PassportExtractionJobResponse {
   job: PassportExtractionJob;
 }
 
+export interface PassportDataUpdateResponse {
+  success: true;
+  message: "Passport data updated successfully";
+  data: PassportExtractedFields;
+}
+
 export interface UploadPassportResponse {
   success: true;
   imageUrl: string;
@@ -96,11 +102,50 @@ export interface RecentPassportExtractionsResponse {
   jobs: RecentPassportExtraction[];
 }
 
+export type VisaApplicationStatus =
+  | "DRAFT"
+  | "SUBMITTED"
+  | "IN_REVIEW"
+  | "APPROVED"
+  | "REJECTED"
+  | "CANCELLED";
+
+export type VisaDocumentChecklistStatus = "missing" | "uploaded" | "not_applicable";
+
+export interface VisaDocumentChecklistItem {
+  id: string;
+  label: string;
+  required: boolean;
+  status: VisaDocumentChecklistStatus;
+  notes: string;
+}
+
+export interface VisaApplicationFormData {
+  purposeOfTravel: string;
+  intendedArrivalDate: string | null;
+  intendedDepartureDate: string | null;
+  accommodationAddress: string;
+  sponsorName: string;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
+  notes: string;
+  documents: VisaDocumentChecklistItem[];
+}
+
+export interface LinkedPassportExtraction {
+  id: string;
+  status: PassportExtractionJobStatus;
+  countryHint: string | null;
+  createdAt: string;
+  extractedData: PassportExtractedFields | null;
+}
+
 export interface VisaApplicationSummary {
   id: string;
+  passportJobId: string | null;
   destinationCountry: string;
   visaType: string;
-  status: "DRAFT" | "SUBMITTED" | "IN_REVIEW" | "APPROVED" | "REJECTED" | "CANCELLED";
+  status: VisaApplicationStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -108,6 +153,38 @@ export interface VisaApplicationSummary {
 export interface VisaApplicationsResponse {
   success: true;
   applications: VisaApplicationSummary[];
+}
+
+export interface CreateVisaApplicationResponse {
+  success: true;
+  application: VisaApplicationSummary;
+}
+
+export interface VisaApplicationDetail extends VisaApplicationSummary {
+  passportJob: LinkedPassportExtraction | null;
+  formData: VisaApplicationFormData;
+  checklist: VisaDocumentChecklistItem[];
+  readiness: VisaApplicationReadiness;
+}
+
+export interface VisaApplicationReadiness {
+  readinessScore: number;
+  isReady: boolean;
+  missingFields: string[];
+  missingDocuments: string[];
+  warnings: string[];
+}
+
+export interface VisaApplicationDetailResponse {
+  success: true;
+  application: VisaApplicationDetail;
+}
+
+export interface UpdateVisaApplicationRequest {
+  destinationCountry?: string;
+  visaType?: string;
+  status?: VisaApplicationStatus;
+  formData?: VisaApplicationFormData;
 }
 
 export interface StructuredApiError {

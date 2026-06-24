@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -16,6 +17,14 @@ const passportFieldSchema = z.enum([
   "place_of_birth",
 ]);
 
+const countryDocumentSchema = z
+  .object({
+    key: z.string().trim().min(1).max(80),
+    label: z.string().trim().min(1).max(120),
+    required: z.boolean(),
+  })
+  .strict();
+
 const countryRulesSchema = z
   .object({
     country_code: z.string().regex(/^[A-Z]{2}$/),
@@ -30,8 +39,9 @@ const countryRulesSchema = z
       .strict(),
     visa_rules: z
       .object({
-        supported_visa_types: z.array(z.string().min(1)).min(1),
-        required_documents: z.array(z.string().min(1)).min(1),
+        supported_visa_types: z.array(z.string().trim().min(1)).min(1),
+        min_passport_validity_months: z.number().int().min(0).max(60),
+        required_documents: z.array(countryDocumentSchema).min(1),
       })
       .strict(),
   })
@@ -45,7 +55,22 @@ const countryRuleFiles = {
   CA: "canada.json",
 } as const;
 
+const genericRequirements = {
+  countryCode: null,
+  countryName: "Generic visa requirements",
+  minPassportValidityMonths: 6,
+  requiredDocuments: [
+    { key: "passport_scan", label: "Passport scan", required: true },
+    { key: "passport_photo", label: "Passport-size photo", required: true },
+    { key: "bank_statement", label: "Bank statement", required: true },
+    { key: "travel_itinerary", label: "Travel itinerary", required: true },
+    { key: "hotel_booking", label: "Hotel booking", required: false },
+    { key: "employment_or_student_letter", label: "Employment/student letter", required: false },
+  ],
+} as const;
+
 export type PassportField = z.infer<typeof passportFieldSchema>;
+export type CountryRuleDocument = z.infer<typeof countryDocumentSchema>;
 export type CountryRules = z.infer<typeof countryRulesSchema>;
 export type SupportedCountryCode = keyof typeof countryRuleFiles;
 
@@ -75,6 +100,51 @@ export interface PassportValidationResult {
   isValid: boolean;
 }
 
+export interface VisaRequirements {
+  countryCode: string | null;
+  countryName: string;
+  visaType: string;
+  visaTypeSupported: boolean;
+  minPassportValidityMonths: number;
+  requiredDocuments: CountryRuleDocument[];
+  source: "country_rule" | "generic";
+}
+
+export interface ApplicationReadinessInput {
+  destinationCountry: string;
+  visaType: string;
+  formData?: {
+    purposeOfTravel?: string | null;
+    intendedArrivalDate?: string | null;
+    intendedDepartureDate?: string | null;
+    accommodationAddress?: string | null;
+    emergencyContactName?: string | null;
+    emergencyContactPhone?: string | null;
+    documents?: Array<{
+      id?: string | null;
+      key?: string | null;
+      status?: string | null;
+    }> | null;
+  } | null;
+}
+
+export interface PassportReadinessData {
+  passportNumber?: string | null;
+  surname?: string | null;
+  givenNames?: string | null;
+  nationality?: string | null;
+  dateOfBirth?: string | null;
+  dateOfExpiry?: string | null;
+}
+
+export interface ApplicationReadinessResult {
+  readinessScore: number;
+  isReady: boolean;
+  missingFields: string[];
+  missingDocuments: string[];
+  warnings: string[];
+}
+
 export class CountryRulesError extends Error {
   constructor(
     public readonly code: "UNSUPPORTED_COUNTRY" | "RULES_NOT_FOUND" | "INVALID_RULES",
@@ -99,13 +169,33 @@ function normalizeCountryCode(countryCode: string): SupportedCountryCode {
   return normalized as SupportedCountryCode;
 }
 
+function normalizedVisaType(visaType: string): string {
+  return visaType
+    .trim()
+    .toLowerCase()
+    .replace(/[-\s]+/g, "_")
+    .replace(/_visa$/, "");
+}
+
 function countryRulesDirectory() {
   const configuredDirectory = process.env.COUNTRY_RULES_DIR;
   if (configuredDirectory) {
     return pathToFileURL(`${resolve(configuredDirectory)}${sep}`);
   }
 
-  return new URL("../../../shared/country-rules/", import.meta.url);
+  const candidates = [
+    resolve(process.cwd(), "shared", "country-rules"),
+    resolve(process.cwd(), "..", "..", "shared", "country-rules"),
+  ];
+  const directory = candidates.find((candidate) => existsSync(candidate));
+  if (!directory) {
+    throw new CountryRulesError(
+      "RULES_NOT_FOUND",
+      "Country rules directory could not be located. Set COUNTRY_RULES_DIR to override it.",
+    );
+  }
+
+  return pathToFileURL(`${directory}${sep}`);
 }
 
 async function readCountryRules(countryCode: SupportedCountryCode): Promise<CountryRules> {
@@ -168,6 +258,11 @@ export function loadCountryRules(countryCode: string): Promise<CountryRules> {
   return loading;
 }
 
+/** Returns one configured country rule set and rejects unknown country codes. */
+export function getCountryRule(countryCode: string): Promise<CountryRules> {
+  return loadCountryRules(countryCode);
+}
+
 export function clearCountryRulesCache(): void {
   rulesCache.clear();
 }
@@ -185,9 +280,9 @@ function parseIsoDate(value: string): Date | null {
   const day = Number(match[3]);
   const date = new Date(Date.UTC(year, month - 1, day));
 
-  return date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day
+  return date.getUTCFullYear() === year
+    && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day
     ? date
     : null;
 }
@@ -203,12 +298,49 @@ function addUtcMonths(date: Date, months: number): Date {
   return result;
 }
 
+function cloneDocuments(documents: readonly CountryRuleDocument[]): CountryRuleDocument[] {
+  return documents.map((document) => ({ ...document }));
+}
+
+/** Returns configured requirements, or generic requirements for an unsupported destination. */
+export async function getVisaRequirements(
+  countryCode: string,
+  visaType: string,
+): Promise<VisaRequirements> {
+  const normalizedType = normalizedVisaType(visaType);
+
+  try {
+    const rule = await getCountryRule(countryCode);
+    return {
+      countryCode: rule.country_code,
+      countryName: rule.country_name,
+      visaType: normalizedType,
+      visaTypeSupported: rule.visa_rules.supported_visa_types.includes(normalizedType),
+      minPassportValidityMonths: rule.visa_rules.min_passport_validity_months,
+      requiredDocuments: cloneDocuments(rule.visa_rules.required_documents),
+      source: "country_rule",
+    };
+  } catch (error) {
+    if (!(error instanceof CountryRulesError)) throw error;
+    return {
+      countryCode: genericRequirements.countryCode,
+      countryName: genericRequirements.countryName,
+      visaType: normalizedType,
+      visaTypeSupported: true,
+      minPassportValidityMonths: genericRequirements.minPassportValidityMonths,
+      requiredDocuments: cloneDocuments(genericRequirements.requiredDocuments),
+      source: "generic",
+    };
+  }
+}
+
+/** Validates field-level passport data against a configured country rule. */
 export async function validatePassportData(
   countryCode: string,
   passportData: ExtractedPassportData,
   options: PassportValidationOptions = {},
 ): Promise<PassportValidationResult> {
-  const rules = await loadCountryRules(countryCode);
+  const rules = await getCountryRule(countryCode);
   const normalizedCode = rules.country_code as SupportedCountryCode;
   const missingFields = rules.passport_rules.required_fields.filter((field) =>
     isMissing(passportData[field]),
@@ -246,7 +378,7 @@ export async function validatePassportData(
         referenceDate.getUTCDate(),
       ),
     ),
-    rules.passport_rules.min_expiry_months_for_visa,
+    rules.visa_rules.min_passport_validity_months,
   );
   const expiryValidForVisa = expiryDate !== null && expiryDate >= requiredExpiryDate;
 
@@ -254,13 +386,13 @@ export async function validatePassportData(
     warnings.push(`date_of_expiry must use ${rules.passport_rules.date_format}.`);
   } else if (expiryDate && !expiryValidForVisa) {
     warnings.push(
-      `Passport must remain valid for at least ${rules.passport_rules.min_expiry_months_for_visa} months.`,
+      `Passport must remain valid for at least ${rules.visa_rules.min_passport_validity_months} months.`,
     );
   }
 
   if (
-    options.visaType &&
-    !rules.visa_rules.supported_visa_types.includes(options.visaType)
+    options.visaType
+    && !rules.visa_rules.supported_visa_types.includes(normalizedVisaType(options.visaType))
   ) {
     warnings.push(
       `Visa type '${options.visaType}' is not configured for ${rules.country_name}.`,
@@ -274,9 +406,95 @@ export async function validatePassportData(
     passportNumberValid,
     expiryValidForVisa,
     isValid:
-      missingFields.length === 0 &&
-      passportNumberValid === true &&
-      expiryValidForVisa &&
-      warnings.length === 0,
+      missingFields.length === 0
+      && passportNumberValid === true
+      && expiryValidForVisa
+      && warnings.length === 0,
+  };
+}
+
+/** Scores a visa application against country requirements and the linked passport. */
+export async function validateApplicationReadiness(
+  application: ApplicationReadinessInput,
+  passportData: PassportReadinessData | null | undefined,
+  referenceDate = new Date(),
+): Promise<ApplicationReadinessResult> {
+  const requirements = await getVisaRequirements(
+    application.destinationCountry,
+    application.visaType,
+  );
+  const missingFields: string[] = [];
+  const missingDocuments: string[] = [];
+  const warnings: string[] = [];
+  const requiredFormFields = [
+    ["purposeOfTravel", "Purpose of travel"],
+    ["intendedArrivalDate", "Intended arrival date"],
+    ["intendedDepartureDate", "Intended departure date"],
+    ["accommodationAddress", "Accommodation address"],
+    ["emergencyContactName", "Emergency contact name"],
+    ["emergencyContactPhone", "Emergency contact phone"],
+  ] as const;
+
+  let completedChecks = 0;
+  let totalChecks = 2 + requiredFormFields.length + requirements.requiredDocuments.filter((item) => item.required).length + 1;
+
+  if (!passportData) {
+    missingFields.push("Passport data");
+  } else {
+    completedChecks += 1;
+  }
+
+  const expiry = passportData?.dateOfExpiry ? parseIsoDate(passportData.dateOfExpiry) : null;
+  if (!passportData?.dateOfExpiry) {
+    missingFields.push("Passport expiry date");
+  } else if (!expiry) {
+    missingFields.push("Valid passport expiry date");
+  } else if (expiry < addUtcMonths(referenceDate, requirements.minPassportValidityMonths)) {
+    warnings.push(
+      `Passport must be valid for at least ${requirements.minPassportValidityMonths} months.`,
+    );
+  } else {
+    completedChecks += 1;
+  }
+
+  for (const [key, label] of requiredFormFields) {
+    if (isMissing(application.formData?.[key])) {
+      missingFields.push(label);
+    } else {
+      completedChecks += 1;
+    }
+  }
+
+  for (const document of requirements.requiredDocuments) {
+    if (!document.required) continue;
+    const completed = application.formData?.documents?.some((item) =>
+      (item.id === document.key || item.key === document.key) && item.status === "uploaded",
+    );
+    if (completed) {
+      completedChecks += 1;
+    } else {
+      missingDocuments.push(document.label);
+    }
+  }
+
+  if (!requirements.visaTypeSupported) {
+    warnings.push(
+      `Visa type '${application.visaType}' is not configured for ${requirements.countryName}.`,
+    );
+  } else {
+    completedChecks += 1;
+  }
+
+  if (requirements.source === "generic") {
+    warnings.push("Country-specific requirements are unavailable; generic requirements are in use.");
+  }
+
+  totalChecks = Math.max(totalChecks, 1);
+  return {
+    readinessScore: Math.round((completedChecks / totalChecks) * 100),
+    isReady: missingFields.length === 0 && missingDocuments.length === 0 && warnings.length === 0,
+    missingFields,
+    missingDocuments,
+    warnings,
   };
 }

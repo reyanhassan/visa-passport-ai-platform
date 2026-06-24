@@ -2,21 +2,21 @@
   "country_code": "SA",
   "country_name": "Saudi Arabia",
   "passport_rules": {
-    "passport_number_regex": "^[A-Z][0-9]{8}$",
-    "required_fields": [
-      "passport_number",
-      "surname",
-      "given_names",
-      "nationality",
-      "date_of_birth",
-      "sex",
-      "date_of_expiry"
-    ],
+    "passport_number_regex": "^[A-Z0-9]{8,9}$",
+    "required_fields": ["passport_number", "surname", "given_names", "nationality", "date_of_birth", "sex", "date_of_expiry"],
     "date_format": "YYYY-MM-DD",
     "min_expiry_months_for_visa": 6
   },
   "visa_rules": {
     "supported_visa_types": ["tourist", "business", "family_visit"],
-    "required_documents": ["passport_scan", "photo", "accommodation_details"]
+    "min_passport_validity_months": 6,
+    "required_documents": [
+      { "key": "passport_scan", "label": "Passport scan", "required": true },
+      { "key": "passport_photo", "label": "Passport-size photo", "required": true },
+      { "key": "bank_statement", "label": "Bank statement", "required": true },
+      { "key": "travel_itinerary", "label": "Travel itinerary", "required": true },
+      { "key": "hotel_booking", "label": "Hotel booking", "required": true },
+      { "key": "employment_or_student_letter", "label": "Employment/student letter", "required": false }
+    ]
   }
 }
