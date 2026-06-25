@@ -1,0 +1,73 @@
+{
+  "status": "succeeded",
+  "analyzeResult": {
+    "content": "P<PAKHASSAN<<REYAN<<<<<<<<<<<<<<<<<<<<<<<<<<\nAB12345671PAK0101011M3201015<<<<<<<<<<<<<<08",
+    "documents": [
+      {
+        "docType": "idDocument.passport",
+        "confidence": 0.98,
+        "fields": {
+          "DocumentNumber": {
+            "type": "string",
+            "valueString": "ZZ0000000",
+            "content": "ZZ0000000",
+            "confidence": 0.65
+          },
+          "LastName": {
+            "type": "string",
+            "valueString": "Hassan",
+            "content": "Hassan",
+            "confidence": 0.95
+          },
+          "FirstName": {
+            "type": "string",
+            "valueString": "Reyan",
+            "content": "Reyan",
+            "confidence": 0.96
+          },
+          "Nationality": {
+            "type": "countryRegion",
+            "valueCountryRegion": "Pakistan",
+            "content": "Pakistan",
+            "confidence": 0.9
+          },
+          "DateOfBirth": {
+            "type": "date",
+            "valueDate": "2001-01-01",
+            "content": "2001-01-01",
+            "confidence": 0.94
+          },
+          "Sex": {
+            "type": "string",
+            "valueString": "Male",
+            "content": "Male",
+            "confidence": 0.9
+          },
+          "DateOfIssue": {
+            "type": "date",
+            "valueDate": "2022-01-01",
+            "content": "2022-01-01",
+            "confidence": 0.9
+          },
+          "DateOfExpiration": {
+            "type": "date",
+            "valueDate": "2032-01-01",
+            "content": "2032-01-01",
+            "confidence": 0.93
+          },
+          "PlaceOfBirth": {
+            "type": "string",
+            "valueString": "Lahore",
+            "content": "Lahore",
+            "confidence": 0.8
+          },
+          "MachineReadableZone": {
+            "type": "string",
+            "valueString": "P<PAKHASSAN<<REYAN<<<<<<<<<<<<<<<<<<<<<<<<<<\nAB12345671PAK0101011M3201015<<<<<<<<<<<<<<08",
+            "confidence": 0.99
+          }
+        }
+      }
+    ]
+  }
+}

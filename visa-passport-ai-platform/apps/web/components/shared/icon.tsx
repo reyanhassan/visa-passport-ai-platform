@@ -4,7 +4,8 @@ export type IconName =
   | "home" | "passport" | "file" | "settings" | "users" | "building"
   | "globe" | "shield" | "audit" | "upload" | "scan" | "check"
   | "clock" | "arrow" | "search" | "bell" | "more" | "trend"
-  | "zap" | "logout" | "plus" | "filter" | "download" | "lock" | "refresh";
+  | "zap" | "logout" | "plus" | "filter" | "download" | "lock" | "refresh"
+  | "eye" | "trash";
 
 const paths: Record<IconName, ReactNode> = {
   home: <><path d="m3 10 9-7 9 7"/><path d="M5 9v11h14V9"/><path d="M9 20v-6h6v6"/></>,
@@ -32,6 +33,8 @@ const paths: Record<IconName, ReactNode> = {
   download: <><path d="M12 4v12M7 11l5 5 5-5"/><path d="M4 20h16"/></>,
   lock: <><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></>,
   refresh: <><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M6.1 9a7 7 0 0 1 11.6-2.6L20 11M4 13l2.3 4.6A7 7 0 0 0 17.9 15"/></>,
+  eye: <><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="3"/></>,
+  trash: <><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 14h10l1-14"/><path d="M9 7V4h6v3"/></>,
 };
 
 export function Icon({ name, className, ...props }: { name: IconName } & SVGProps<SVGSVGElement>) {

@@ -1,6 +1,6 @@
 # Passport OCR service
 
-A small FastAPI service that owns passport OCR orchestration and MRZ parsing for the VisaFlow platform. The current implementation is deterministic and does not perform real OCR or download the supplied image URL.
+A small FastAPI service that owns passport OCR orchestration and MRZ parsing for the VisaFlow platform. It supports deterministic mock OCR locally and Azure Document Intelligence for real passport extraction.
 
 ## Structure
 
@@ -79,19 +79,17 @@ The default is:
 OCR_PROVIDER=mock
 ```
 
-Reserved provider values are `azure`, `aws`, `tesseract`, and `paddleocr`. They intentionally raise a configuration error until their adapters are implemented. TODO markers identify the boundaries for:
+Supported provider values are `mock`, `azure`, and `aws`:
 
-- Azure Document Intelligence
-- AWS Textract
-- Tesseract fallback
-- PaddleOCR fallback
-- image preprocessing
-- ICAO 9303 parsing and MRZ checksum validation
-- provider and field-level confidence scoring
+- `mock` returns deterministic local data.
+- `azure` calls Azure Document Intelligence with `prebuilt-idDocument`.
+- `aws` returns a structured not-implemented error.
+
+For the full provider guide and environment variables, see `docs/ocr.md`.
 
 ## Security notes
 
-The mock implementation validates `image_url` but never downloads it. A real retrieval layer must enforce HTTPS, block private and link-local networks, limit redirects and response size, verify content signatures, and apply strict timeouts before passing bytes to an OCR provider. Do not log passport images or extracted identity fields.
+Do not log passport images, signed URLs, MRZ text, Azure keys, or extracted identity fields. Azure mode downloads the signed URL in memory, enforces file type and size checks, and sends bytes directly to Document Intelligence.
 
 ## Tests
 

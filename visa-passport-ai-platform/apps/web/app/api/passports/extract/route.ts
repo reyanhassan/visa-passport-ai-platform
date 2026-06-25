@@ -20,8 +20,12 @@ import {
   resetPassportExtractionQueue,
 } from "@/lib/server/passport-extraction-queue";
 import { getCurrentUser } from "@/lib/auth";
+import { objectKeyBelongsToUser } from "@/lib/server/storage";
+import { canUseAgencyWorkspace } from "@/lib/server/access-control";
 
 const passportObjectKeyPattern =
+  /^users\/[^/]+\/passports\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(?:jpg|jpeg|png|webp|pdf)$/i;
+const legacyPassportObjectKeyPattern =
   /^uploads\/passports\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(?:jpg|png|webp|pdf)$/i;
 const safePassportFilenamePattern =
   /^[a-z0-9][a-z0-9_-]*\.(?:jpg|jpeg|png|webp|pdf)$/i;
@@ -31,7 +35,7 @@ function isValidObjectKey(value: string): boolean {
 }
 
 function isValidImageUrl(value: string): boolean {
-  if (value.startsWith("/")) return isValidObjectKey(value.slice(1));
+  if (value.startsWith("/")) return legacyPassportObjectKeyPattern.test(value.slice(1));
   const mockPrefix = "mock://uploads/passports/";
   if (value.startsWith(mockPrefix)) {
     return safePassportFilenamePattern.test(value.slice(mockPrefix.length));
@@ -63,6 +67,7 @@ const requestSchema = z
       .trim()
       .refine(isValidObjectKey)
       .optional(),
+    agencyClientId: z.string().trim().min(1).max(64).optional(),
   })
   .strict()
   .refine((value) => Boolean(value.imageUrl || value.objectKey));
@@ -105,6 +110,33 @@ export async function POST(request: Request) {
     return apiError("VALIDATION_ERROR", "Invalid request body", 400);
   }
 
+  if (
+    parsed.data.objectKey
+    && !objectKeyBelongsToUser(parsed.data.objectKey, user.id)
+  ) {
+    return apiError("FORBIDDEN_OBJECT_KEY", "Passport object does not belong to this user", 403);
+  }
+
+  let agencyId: string | null = null;
+  let agencyClientId: string | null = null;
+
+  if (parsed.data.agencyClientId) {
+    if (!canUseAgencyWorkspace(user)) {
+      return apiError("AGENCY_REQUIRED", "Agency client extraction requires agency access", 403);
+    }
+
+    const client = await prisma.agencyClient.findFirst({
+      where: { id: parsed.data.agencyClientId, agencyId: user.agencyId! },
+      select: { id: true },
+    });
+    if (!client) return apiError("AGENCY_CLIENT_NOT_FOUND", "Agency client not found", 404);
+
+    agencyId = user.agencyId!;
+    agencyClientId = client.id;
+  } else if (canUseAgencyWorkspace(user)) {
+    agencyId = user.agencyId!;
+  }
+
   let extractionMode: "queue" | "mock";
   try {
     ({ extractionMode } = loadWebDeploymentConfig());
@@ -121,11 +153,11 @@ export async function POST(request: Request) {
       const createdJob = await transaction.passportExtractionJob.create({
         data: {
           userId: user.id,
-          agencyId: user.agencyId,
+          agencyId,
+          agencyClientId,
           status: ExtractionJobStatus.PENDING,
           documentType: parsed.data.documentType,
           countryHint: parsed.data.countryHint,
-          // Temporary mock transport. Replace with an opaque private-storage key before real uploads.
           imageObjectKey: imageReference,
         },
       });
@@ -135,10 +167,11 @@ export async function POST(request: Request) {
         entityType: "PassportExtractionJob",
         entityId: createdJob.id,
         userId: user.id,
-        agencyId: user.agencyId,
+        agencyId,
         metadata: {
           documentType: createdJob.documentType,
           countryHint: createdJob.countryHint,
+          agencyClientId: createdJob.agencyClientId,
         },
       });
 
@@ -175,12 +208,12 @@ export async function POST(request: Request) {
   const queuePayload: PassportExtractionQueuePayload = {
     jobId: job.id,
     userId: user.id,
-    agencyId: user.agencyId,
+    agencyId,
+    agencyClientId,
     documentType: "passport",
     countryHint: parsed.data.countryHint,
-    imageUrl: imageReference.startsWith("http")
-      ? imageReference
-      : new URL(`/${imageReference.replace(/^\//, "")}`, process.env.NEXT_PUBLIC_APP_URL ?? request.url).toString(),
+    objectKey: parsed.data.objectKey,
+    imageUrl: parsed.data.imageUrl,
     requestedAt: job.createdAt.toISOString(),
   };
 

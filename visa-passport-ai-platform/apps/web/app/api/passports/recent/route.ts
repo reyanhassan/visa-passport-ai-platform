@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth";
 import { apiError } from "@/lib/server/api-error";
+import { canUseAgencyWorkspace } from "@/lib/server/access-control";
 
 export const dynamic = "force-dynamic";
 
@@ -14,10 +15,15 @@ export async function GET() {
 
   try {
     const jobs = await prisma.passportExtractionJob.findMany({
-      where: { userId: user.id },
+      where: canUseAgencyWorkspace(user)
+        ? { agencyId: user.agencyId! }
+        : { userId: user.id, agencyId: null },
       orderBy: { createdAt: "desc" },
       take: 20,
-      include: { extractedData: { select: { passportNumberEncrypted: true } } },
+      include: {
+        agencyClient: { select: { id: true, fullName: true } },
+        extractedData: { select: { passportNumberEncrypted: true } },
+      },
     });
 
     const response: RecentPassportExtractionsResponse = {
@@ -25,6 +31,8 @@ export async function GET() {
       jobs: jobs.map((job) => ({
         id: job.id,
         documentType: job.documentType,
+        agencyClientId: job.agencyClient?.id ?? null,
+        agencyClientName: job.agencyClient?.fullName ?? null,
         countryHint: job.countryHint,
         maskedPassportNumber: job.extractedData
           ? maskPassportNumber(decryptField(job.extractedData.passportNumberEncrypted))

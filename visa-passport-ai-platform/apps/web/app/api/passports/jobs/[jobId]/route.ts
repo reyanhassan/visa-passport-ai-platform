@@ -15,6 +15,7 @@ import { z } from "zod";
 
 import { apiError } from "@/lib/server/api-error";
 import { getCurrentUser } from "@/lib/auth";
+import { canUseAgencyWorkspace } from "@/lib/server/access-control";
 const jobIdSchema = z.string().uuid();
 
 type RouteContext = {
@@ -51,8 +52,13 @@ export async function GET(request: Request, context: RouteContext) {
 
   try {
     const job = await prisma.passportExtractionJob.findFirst({
-      where: { id: jobId, userId: user.id },
-      include: { extractedData: true },
+      where: canUseAgencyWorkspace(user)
+        ? { id: jobId, agencyId: user.agencyId! }
+        : { id: jobId, userId: user.id, agencyId: null },
+      include: {
+        agencyClient: { select: { id: true, fullName: true } },
+        extractedData: true,
+      },
     });
 
     if (!job) {
@@ -64,6 +70,8 @@ export async function GET(request: Request, context: RouteContext) {
       job: {
         id: job.id,
         status: job.status,
+        agencyClientId: job.agencyClient?.id ?? null,
+        agencyClientName: job.agencyClient?.fullName ?? null,
         confidence: job.confidence === null ? null : Number(job.confidence),
         countryHint: job.countryHint,
         createdAt: job.createdAt.toISOString(),
@@ -83,7 +91,7 @@ export async function GET(request: Request, context: RouteContext) {
         entityType: "PassportExtractionJob",
         entityId: job.id,
         userId: user.id,
-        agencyId: user.agencyId,
+        agencyId: job.agencyId,
         ipAddress: forwardedFor ?? request.headers.get("x-real-ip"),
         userAgent: request.headers.get("user-agent"),
         metadata: { status: job.status },

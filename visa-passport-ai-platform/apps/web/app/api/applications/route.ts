@@ -13,6 +13,7 @@ import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
 import { apiError } from "@/lib/server/api-error";
+import { canUseAgencyWorkspace } from "@/lib/server/access-control";
 
 const applicationSchema = z
   .object({
@@ -23,12 +24,15 @@ const applicationSchema = z
       .transform((value) => value.toUpperCase()),
     visaType: z.string().trim().min(1).max(120),
     passportJobId: z.string().uuid().optional(),
+    agencyClientId: z.string().trim().min(1).max(64).optional(),
   })
   .strict();
 
 function serializeApplication(application: {
   id: string;
   passportJobId: string | null;
+  agencyClientId: string | null;
+  agencyClient: { fullName: string } | null;
   destinationCountry: string;
   visaType: string;
   status: VisaApplicationStatus;
@@ -38,6 +42,8 @@ function serializeApplication(application: {
   return {
     id: application.id,
     passportJobId: application.passportJobId,
+    agencyClientId: application.agencyClientId,
+    agencyClientName: application.agencyClient?.fullName ?? null,
     destinationCountry: application.destinationCountry,
     visaType: application.visaType,
     status: application.status,
@@ -74,15 +80,23 @@ export async function GET() {
   const user = await getCurrentUser();
   if (!user) return apiError("UNAUTHENTICATED", "Authentication required", 401);
 
-  const applications = await prisma.visaApplication.findMany({
-    where: { userId: user.id },
-    orderBy: { updatedAt: "desc" },
-  });
-  const response: VisaApplicationsResponse = {
-    success: true,
-    applications: applications.map(serializeApplication),
-  };
-  return NextResponse.json(response, { headers: { "Cache-Control": "no-store" } });
+  try {
+    const applications = await prisma.visaApplication.findMany({
+      where: canUseAgencyWorkspace(user)
+        ? { agencyId: user.agencyId! }
+        : { userId: user.id, agencyId: null },
+      orderBy: { updatedAt: "desc" },
+      include: { agencyClient: { select: { fullName: true } } },
+    });
+    const response: VisaApplicationsResponse = {
+      success: true,
+      applications: applications.map(serializeApplication),
+    };
+    return NextResponse.json(response, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    console.error(`[applications] list failed: ${sanitizeLogMessage(error)}`);
+    return apiError("DATABASE_ERROR", "Unable to load visa applications", 500);
+  }
 }
 
 export async function POST(request: Request) {
@@ -93,9 +107,35 @@ export async function POST(request: Request) {
   if (!parsed.success) return apiError("VALIDATION_ERROR", "Invalid application details", 400);
 
   try {
+    let agencyClientId: string | null = null;
+    let agencyId: string | null = null;
+
+    if (canUseAgencyWorkspace(user)) {
+      if (!parsed.data.agencyClientId) {
+        return apiError(
+          "AGENCY_CLIENT_REQUIRED",
+          "Agency applications must be linked to an agency client",
+          400,
+        );
+      }
+
+      const client = await prisma.agencyClient.findFirst({
+        where: { id: parsed.data.agencyClientId, agencyId: user.agencyId! },
+        select: { id: true },
+      });
+      if (!client) return apiError("AGENCY_CLIENT_NOT_FOUND", "Agency client not found", 404);
+
+      agencyId = user.agencyId!;
+      agencyClientId = client.id;
+    } else if (parsed.data.agencyClientId) {
+      return apiError("AGENCY_REQUIRED", "Agency client applications require agency access", 403);
+    }
+
     if (parsed.data.passportJobId) {
       const passportJob = await prisma.passportExtractionJob.findFirst({
-        where: { id: parsed.data.passportJobId, userId: user.id },
+        where: agencyId
+          ? { id: parsed.data.passportJobId, agencyId, agencyClientId }
+          : { id: parsed.data.passportJobId, userId: user.id, agencyId: null },
         select: { id: true },
       });
 
@@ -113,24 +153,27 @@ export async function POST(request: Request) {
       const created = await transaction.visaApplication.create({
         data: {
           userId: user.id,
-          agencyId: user.agencyId,
+          agencyId,
+          agencyClientId,
           passportJobId: parsed.data.passportJobId ?? null,
           destinationCountry: parsed.data.destinationCountry,
           visaType: parsed.data.visaType,
           status: VisaApplicationStatus.DRAFT,
           formData: initialFormData as unknown as Prisma.InputJsonValue,
         },
+        include: { agencyClient: { select: { fullName: true } } },
       });
       await createAuditLog(transaction, {
         action: AuditAction.VISA_APPLICATION_CREATED,
         entityType: "VisaApplication",
         entityId: created.id,
         userId: user.id,
-        agencyId: user.agencyId,
+        agencyId,
         metadata: {
           destinationCountry: created.destinationCountry,
           visaType: created.visaType,
           passportJobId: created.passportJobId,
+          agencyClientId: created.agencyClientId,
           status: created.status,
         },
       });

@@ -3,6 +3,7 @@ import asyncio
 from httpx import ASGITransport, AsyncClient, Response
 
 from app.main import app
+from app.services.providers.mock_provider import MOCK_MRZ
 
 
 def test_mock_passport_ocr_endpoint() -> None:
@@ -38,7 +39,7 @@ def test_mock_passport_ocr_endpoint() -> None:
             "place_of_birth": "LAHORE",
         },
         "mrz": {
-            "raw": "P<PAKHASSAN<<REYAN<<<<<<<<<<<<<<<<<<<<<<",
+            "raw": MOCK_MRZ,
             "valid": True,
         },
         "warnings": [],

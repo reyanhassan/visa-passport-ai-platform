@@ -14,6 +14,7 @@ export interface CreatePassportExtractionRequest {
   countryHint?: string;
   imageUrl?: string;
   objectKey?: string;
+  agencyClientId?: string;
 }
 
 export type CreatePassportExtractionResponse =
@@ -36,9 +37,11 @@ export interface PassportExtractionQueuePayload {
   jobId: string;
   userId: string | null;
   agencyId: string | null;
+  agencyClientId?: string | null;
   documentType: "passport";
   countryHint?: string;
-  imageUrl: string;
+  objectKey?: string;
+  imageUrl?: string;
   requestedAt: string;
 }
 
@@ -63,6 +66,8 @@ export interface PassportExtractedFields {
 export interface PassportExtractionJob {
   id: string;
   status: PassportExtractionJobStatus;
+  agencyClientId?: string | null;
+  agencyClientName?: string | null;
   confidence: number | null;
   countryHint: string | null;
   createdAt: string;
@@ -83,13 +88,16 @@ export interface PassportDataUpdateResponse {
 
 export interface UploadPassportResponse {
   success: true;
-  imageUrl: string;
   objectKey: string;
+  contentType: string;
+  size: number;
 }
 
 export interface RecentPassportExtraction {
   id: string;
   documentType: string;
+  agencyClientId?: string | null;
+  agencyClientName?: string | null;
   countryHint: string | null;
   maskedPassportNumber: string | null;
   status: PassportExtractionJobStatus;
@@ -143,6 +151,8 @@ export interface LinkedPassportExtraction {
 export interface VisaApplicationSummary {
   id: string;
   passportJobId: string | null;
+  agencyClientId?: string | null;
+  agencyClientName?: string | null;
   destinationCountry: string;
   visaType: string;
   status: VisaApplicationStatus;
@@ -178,6 +188,112 @@ export interface VisaApplicationReadiness {
 export interface VisaApplicationDetailResponse {
   success: true;
   application: VisaApplicationDetail;
+}
+
+export interface VisaApplicationDocumentSummary {
+  id: string;
+  applicationId: string;
+  checklistItemId: string;
+  label: string;
+  objectKey: string;
+  fileName: string;
+  contentType: string;
+  size: number;
+  createdAt: string;
+  updatedAt: string;
+  signedReadUrl?: string;
+}
+
+export interface VisaApplicationDocumentsResponse {
+  success: true;
+  documents: VisaApplicationDocumentSummary[];
+}
+
+export interface UploadVisaApplicationDocumentResponse {
+  success: true;
+  document: VisaApplicationDocumentSummary;
+  application: VisaApplicationDetail;
+}
+
+export interface DeleteVisaApplicationDocumentResponse {
+  success: true;
+  application: VisaApplicationDetail;
+}
+
+export interface SignedStorageUrlResponse {
+  success: true;
+  url: string;
+  expiresInSeconds: number;
+}
+
+export interface AgencySummary {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  country: string | null;
+  city: string | null;
+  status: "PENDING" | "ACTIVE" | "SUSPENDED";
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgencyResponse {
+  success: true;
+  agency: AgencySummary;
+}
+
+export interface AgencyClientSummary {
+  id: string;
+  fullName: string;
+  email: string | null;
+  phone: string | null;
+  notes: string | null;
+  activeCases: number;
+  passportJobs: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgencyClientsResponse {
+  success: true;
+  clients: AgencyClientSummary[];
+}
+
+export interface AgencyClientResponse {
+  success: true;
+  client: AgencyClientSummary;
+}
+
+export interface AdminAuditLogSummary {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  userId: string | null;
+  agencyId: string | null;
+  metadata: unknown;
+  createdAt: string;
+}
+
+export interface AdminAuditLogsResponse {
+  success: true;
+  logs: AdminAuditLogSummary[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    pageCount: number;
+  };
+}
+
+export interface AdminAgenciesResponse {
+  success: true;
+  agencies: Array<AgencySummary & {
+    usersCount: number;
+    clientsCount: number;
+    applicationsCount: number;
+  }>;
 }
 
 export interface UpdateVisaApplicationRequest {

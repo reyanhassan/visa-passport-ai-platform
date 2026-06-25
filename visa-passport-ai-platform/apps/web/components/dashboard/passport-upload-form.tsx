@@ -64,7 +64,6 @@ export function PassportUploadForm({
         await onSubmit({
           documentType: "passport",
           countryHint,
-          imageUrl: upload.imageUrl,
           objectKey: upload.objectKey,
         });
       } catch (error) {

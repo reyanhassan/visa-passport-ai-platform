@@ -47,6 +47,7 @@ model User {
 
   extractionJobs   PassportExtractionJob[]
   visaApplications VisaApplication[]
+  visaApplicationDocuments VisaApplicationDocument[]
   auditLogs        AuditLog[]
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
@@ -68,6 +69,7 @@ model Agency {
   users            User[]
   extractionJobs   PassportExtractionJob[]
   visaApplications VisaApplication[]
+  clients          AgencyClient[]
   auditLogs        AuditLog[]
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
@@ -84,6 +86,8 @@ model PassportExtractionJob {
   user           User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
   agencyId       String?
   agency         Agency?             @relation(fields: [agencyId], references: [id], onDelete: SetNull)
+  agencyClientId String?
+  agencyClient   AgencyClient?       @relation(fields: [agencyClientId], references: [id], onDelete: SetNull)
   status         ExtractionJobStatus @default(PENDING)
   documentType   String              @db.VarChar(32)
   countryHint    String?             @db.VarChar(3)
@@ -101,6 +105,7 @@ model PassportExtractionJob {
   @@index([status, createdAt])
   @@index([userId, createdAt])
   @@index([agencyId, createdAt])
+  @@index([agencyClientId, createdAt])
   @@index([expiresAt])
 }
 
@@ -130,18 +135,63 @@ model VisaApplication {
   agency             Agency?                @relation(fields: [agencyId], references: [id], onDelete: SetNull)
   passportJobId      String?
   passportJob        PassportExtractionJob? @relation(fields: [passportJobId], references: [id], onDelete: SetNull)
+  agencyClientId     String?
+  agencyClient       AgencyClient?          @relation(fields: [agencyClientId], references: [id], onDelete: SetNull)
   destinationCountry String                 @db.Char(2)
   visaType           String                 @db.VarChar(120)
   status             VisaApplicationStatus  @default(DRAFT)
   formData           Json                   @default("{}")
+  documents          VisaApplicationDocument[]
   createdAt          DateTime               @default(now()) @db.Timestamptz(3)
   updatedAt          DateTime               @updatedAt @db.Timestamptz(3)
 
   @@index([userId, createdAt])
   @@index([agencyId, status, createdAt])
+  @@index([agencyClientId, createdAt])
   @@index([passportJobId])
   @@index([destinationCountry, visaType])
   @@index([status, updatedAt])
+}
+
+model AgencyClient {
+  id        String @id @default(cuid())
+  agencyId String
+  agency   Agency @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  fullName String  @db.VarChar(200)
+  email    String? @db.VarChar(320)
+  phone    String? @db.VarChar(32)
+  notes    String? @db.Text
+
+  extractionJobs   PassportExtractionJob[]
+  visaApplications VisaApplication[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([agencyId, createdAt])
+}
+
+model VisaApplicationDocument {
+  id              String          @id @default(cuid())
+  applicationId   String
+  application     VisaApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  userId          String?
+  user            User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  checklistItemId String          @db.VarChar(80)
+  label           String          @db.VarChar(120)
+  objectKey       String          @db.Text
+  fileName        String          @db.VarChar(255)
+  contentType     String          @db.VarChar(120)
+  size            Int
+
+  createdAt       DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime        @updatedAt @db.Timestamptz(3)
+
+  @@index([applicationId, checklistItemId])
+  @@index([userId, createdAt])
 }
 
 model CountryRule {

@@ -11,10 +11,12 @@ export {
 } from "@prisma/client";
 export type {
   Agency,
+  AgencyClient,
   AuditLog,
   CountryRule,
   PassportExtractedData,
   PassportExtractionJob,
   User,
   VisaApplication,
+  VisaApplicationDocument,
 } from "@prisma/client";

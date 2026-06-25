@@ -11,6 +11,7 @@ import { z } from "zod";
 
 import { getCurrentUser } from "@/lib/auth";
 import { apiError } from "@/lib/server/api-error";
+import { canUseAgencyWorkspace } from "@/lib/server/access-control";
 
 const jobIdSchema = z.string().uuid();
 
@@ -87,7 +88,9 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   try {
     const job = await prisma.passportExtractionJob.findFirst({
-      where: { id: jobId, userId: user.id },
+      where: canUseAgencyWorkspace(user)
+        ? { id: jobId, agencyId: user.agencyId! }
+        : { id: jobId, userId: user.id, agencyId: null },
       select: { id: true, agencyId: true, extractedData: { select: { id: true } } },
     });
 

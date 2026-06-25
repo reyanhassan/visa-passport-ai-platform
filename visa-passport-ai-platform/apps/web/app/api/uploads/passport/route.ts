@@ -1,25 +1,20 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 
+import { sanitizeLogMessage } from "@visa-platform/config/security";
 import type { UploadPassportResponse } from "@visa-platform/types";
 import { NextResponse } from "next/server";
 
 import { getCurrentUser } from "@/lib/auth";
 import { apiError } from "@/lib/server/api-error";
 import { loadWebDeploymentConfig } from "@/lib/server/deployment-config";
+import { getMaxUploadSizeBytes, getStorageProvider } from "@/lib/server/storage";
 
-const MAX_FILE_SIZE = 15 * 1024 * 1024;
 const extensionByMimeType: Record<string, string> = {
-  "image/jpeg": ".jpg",
-  "image/png": ".png",
-  "image/webp": ".webp",
-  "application/pdf": ".pdf",
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "application/pdf": "pdf",
 };
-
-function uploadDirectory(): string {
-  return join(process.cwd(), "public", "uploads", "passports");
-}
 
 export async function POST(request: Request) {
   const user = await getCurrentUser();
@@ -31,12 +26,15 @@ export async function POST(request: Request) {
 
   const extension = extensionByMimeType[file.type];
   if (!extension) return apiError("UNSUPPORTED_FILE_TYPE", "Use a JPG, PNG, WebP, or PDF file", 415);
-  if (file.size === 0 || file.size > MAX_FILE_SIZE) {
-    return apiError("FILE_SIZE_INVALID", "Passport file must be between 1 byte and 15 MB", 413);
-  }
 
-  const filename = `${randomUUID()}${extension}`;
-  const objectKey = `uploads/passports/${filename}`;
+  const maxUploadSizeBytes = getMaxUploadSizeBytes();
+  if (file.size === 0 || file.size > maxUploadSizeBytes) {
+    return apiError(
+      "FILE_SIZE_INVALID",
+      `Passport file must be between 1 byte and ${Math.floor(maxUploadSizeBytes / 1024 / 1024)} MB`,
+      413,
+    );
+  }
 
   let uploadProvider: "local" | "mock";
   try {
@@ -46,18 +44,32 @@ export async function POST(request: Request) {
     return apiError("CONFIGURATION_ERROR", "Passport upload is not configured correctly", 500);
   }
 
-  if (uploadProvider === "local") {
-    const directory = uploadDirectory();
-    await mkdir(directory, { recursive: true });
-    await writeFile(join(directory, filename), Buffer.from(await file.arrayBuffer()), {
-      flag: "wx",
-    });
+  const objectKey = `users/${user.id}/passports/${randomUUID()}.${extension}`;
+  const contentType = file.type;
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  if (uploadProvider !== "mock") {
+    try {
+      await getStorageProvider().uploadObject({
+        key: objectKey,
+        buffer,
+        contentType,
+        metadata: {
+          userId: user.id,
+          documentType: "passport",
+        },
+      });
+    } catch (error) {
+      console.error(`[passport-upload] storage upload failed: ${sanitizeLogMessage(error)}`);
+      return apiError("STORAGE_UPLOAD_FAILED", "Unable to store passport file", 500);
+    }
   }
 
   const response: UploadPassportResponse = {
     success: true,
-    imageUrl: uploadProvider === "mock" ? `mock://${objectKey}` : `/${objectKey}`,
     objectKey,
+    contentType,
+    size: buffer.byteLength,
   };
   return NextResponse.json(response, { status: 201 });
 }

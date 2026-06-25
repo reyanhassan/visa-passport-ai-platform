@@ -13,6 +13,7 @@ import { AuditAction, createAuditLog } from "../services/auditLog.js";
 import { encryptField } from "../services/encryption.js";
 import { OCRClient, type PassportOCRResult } from "../services/ocrClient.js";
 import { maskError } from "../services/piiMasking.js";
+import { workerConfig } from "../config.js";
 
 const ocrClient = new OCRClient();
 
@@ -96,6 +97,37 @@ async function saveFailedResult(
   });
 }
 
+async function resolvePassportImageUrl(
+  queueJob: Job<PassportExtractionQueuePayload>,
+): Promise<string> {
+  if (queueJob.data.imageUrl) return queueJob.data.imageUrl;
+  if (!queueJob.data.objectKey || !queueJob.data.userId) {
+    throw new UnrecoverableError("Passport extraction job has no resolvable image reference");
+  }
+  if (!workerConfig.internalApiKey) {
+    throw new Error("INTERNAL_API_KEY is required to resolve private object storage URLs");
+  }
+
+  const response = await fetch(`${workerConfig.appUrl}/api/internal/storage/signed-url`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${workerConfig.internalApiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      objectKey: queueJob.data.objectKey,
+      userId: queueJob.data.userId,
+    }),
+  });
+
+  const payload = await response.json().catch(() => null) as { url?: unknown } | null;
+  if (!response.ok || typeof payload?.url !== "string") {
+    throw new Error(`Signed URL request failed with HTTP ${response.status}`);
+  }
+
+  return payload.url;
+}
+
 export async function passportExtractionProcessor(
   queueJob: Job<PassportExtractionQueuePayload>,
 ): Promise<PassportExtractionWorkerResult> {
@@ -112,7 +144,7 @@ export async function passportExtractionProcessor(
   }
 
   try {
-    if (!extractionJob.imageObjectKey || !queueJob.data.imageUrl) {
+    if (!extractionJob.imageObjectKey || (!queueJob.data.imageUrl && !queueJob.data.objectKey)) {
       throw new UnrecoverableError("Passport extraction job has no image reference");
     }
 
@@ -135,12 +167,11 @@ export async function passportExtractionProcessor(
       });
     });
 
-    // The queue carries the worker-ready URL while PostgreSQL retains the stable object key.
-    // TODO: Resolve private object keys to short-lived signed URLs immediately before OCR calls.
+    const imageUrl = await resolvePassportImageUrl(queueJob);
     const result = await ocrClient.extractPassport({
       documentType: extractionJob.documentType,
       countryHint: extractionJob.countryHint,
-      imageUrl: queueJob.data.imageUrl,
+      imageUrl,
       jobId: extractionJob.id,
     });
 
